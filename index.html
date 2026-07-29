@@ -66,8 +66,8 @@
 
   .tabs{
     display:grid;
-    grid-template-columns:1fr 1fr;
-    gap:8px;
+    grid-template-columns:1fr 1fr 1fr;
+    gap:6px;
     background:var(--surface);
     padding:6px;
     border-radius:var(--radius);
@@ -80,8 +80,8 @@
     color:var(--text-muted);
     font-family:'Inter',sans-serif;
     font-weight:600;
-    font-size:14px;
-    padding:12px 8px;
+    font-size:12.5px;
+    padding:12px 4px;
     border-radius:10px;
     cursor:pointer;
     transition:background .15s, color .15s;
@@ -246,8 +246,9 @@
 <main>
 
   <div class="tabs">
-    <button class="tab active" id="tabSap" onclick="switchTab('sap')">Por código SAP</button>
-    <button class="tab" id="tabMonth" onclick="switchTab('month')">Por mes de venc.</button>
+    <button class="tab active" id="tabSap" onclick="switchTab('sap')">Código SAP</button>
+    <button class="tab" id="tabMonth" onclick="switchTab('month')">Mes venc.</button>
+    <button class="tab" id="tabLote" onclick="switchTab('lote')">Lote</button>
   </div>
 
   <!-- PANEL: BÚSQUEDA POR CÓDIGO SAP -->
@@ -257,6 +258,16 @@
       <input type="search" id="sapInput" inputmode="numeric" placeholder="Ej: 123456" autocomplete="off">
       <div class="hint">Muestra todas las ubicaciones con ese código, ordenadas de vencimiento más próximo a más lejano.</div>
       <button class="go" id="btnSap" onclick="searchBySap()">Buscar ubicaciones</button>
+    </div>
+  </section>
+
+  <!-- PANEL: BÚSQUEDA POR LOTE -->
+  <section class="panel" id="panelLote">
+    <div class="field">
+      <label for="loteInput">Número de lote</label>
+      <input type="search" id="loteInput" placeholder="Ej: L2026034" autocomplete="off">
+      <div class="hint">Muestra todas las ubicaciones con ese número de lote, ordenadas de vencimiento más próximo a más lejano.</div>
+      <button class="go" id="btnLote" onclick="searchByLote()">Buscar lote</button>
     </div>
   </section>
 
@@ -306,8 +317,10 @@
     currentTab = tab;
     document.getElementById('tabSap').classList.toggle('active', tab === 'sap');
     document.getElementById('tabMonth').classList.toggle('active', tab === 'month');
+    document.getElementById('tabLote').classList.toggle('active', tab === 'lote');
     document.getElementById('panelSap').classList.toggle('active', tab === 'sap');
     document.getElementById('panelMonth').classList.toggle('active', tab === 'month');
+    document.getElementById('panelLote').classList.toggle('active', tab === 'lote');
     document.getElementById('results').innerHTML = '';
     document.getElementById('status').textContent = '';
     document.getElementById('countBar').style.display = 'none';
@@ -315,6 +328,9 @@
 
   document.getElementById('sapInput').addEventListener('keydown', function(e){
     if (e.key === 'Enter') searchBySap();
+  });
+  document.getElementById('loteInput').addEventListener('keydown', function(e){
+    if (e.key === 'Enter') searchByLote();
   });
 
   async function callApi(params){
@@ -345,6 +361,26 @@
     try{
       const data = await callApi({ action: 'bySap', code });
       renderSapResults(data);
+    }catch(err){
+      setStatus('⚠ ' + err.message, true);
+    }finally{
+      btn.disabled = false;
+    }
+  }
+
+  async function searchByLote(){
+    const lote = document.getElementById('loteInput').value.trim();
+    if (!lote){ setStatus('Ingresa un número de lote.', true); return; }
+
+    const btn = document.getElementById('btnLote');
+    btn.disabled = true;
+    setStatus('Buscando…');
+    document.getElementById('results').innerHTML = '';
+    document.getElementById('countBar').style.display = 'none';
+
+    try{
+      const data = await callApi({ action: 'byLote', lote });
+      renderLoteResults(data);
     }catch(err){
       setStatus('⚠ ' + err.message, true);
     }finally{
@@ -414,6 +450,37 @@
           <div class="meta-row">
             <span>Stock: <b>${escapeHtml(String(item.stock))}</b></span>
             <span>Lote: <b>${escapeHtml(item.lote)}</b></span>
+            <span>Vence: <b>${escapeHtml(item.vencDisplay || '—')}</b></span>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  function renderLoteResults(data){
+    setStatus('');
+    const box = document.getElementById('results');
+    const bar = document.getElementById('countBar');
+
+    if (data.count === 0){
+      box.innerHTML = emptyState('Sin resultados', 'No se encontraron ubicaciones con el lote ' + data.query.lote + '.');
+      bar.style.display = 'none';
+      return;
+    }
+
+    bar.style.display = 'flex';
+    bar.innerHTML = '<span>' + data.count + ' ubicación(es) — lote ' + data.query.lote + '</span><span>Orden: vencimiento ↑</span>';
+
+    box.innerHTML = data.items.map(function(item){
+      return `
+        <div class="card">
+          <div class="card-top">
+            <span class="ubic">${escapeHtml(item.ubicacion)}</span>
+            ${urgencyPill(item.vencMs)}
+          </div>
+          <div class="desc">${escapeHtml(item.descripcion)}</div>
+          <div class="meta-row">
+            <span>SAP: <b>${escapeHtml(item.sap)}</b></span>
+            <span>Stock: <b>${escapeHtml(String(item.stock))}</b></span>
             <span>Vence: <b>${escapeHtml(item.vencDisplay || '—')}</b></span>
           </div>
         </div>`;
